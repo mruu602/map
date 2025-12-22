@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<title>松本市 都市ガス供給エリアマップ</title>
+
+<link rel="stylesheet" href="css/leaflet.css">
+<link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+<link rel="stylesheet" href="css/qgis2web.css">
+<link rel="stylesheet" href="css/fontawesome-all.min.css">
+<link rel="stylesheet" href="css/leaflet.photon.css">
+
+<style>
+html, body, #map {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+#title {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 20px;
+  font-weight: bold;
+  color: #333;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  z-index: 1000;
+  border: 1px solid #ccc;
+}
+#legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(255, 255, 255);
+  padding: 10px 15px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #333;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  z-index: 1000;
+  border: 1px solid #ccc;
+}
+#legend h4 {
+  margin: 0 0 5px;
+  font-size: 16px;
+  font-weight: bold;
+}
+#legend div {
+  display: flex;
+  align-items: center;
+  margin: 4px 0;
+}
+#legend span {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  border: 1px solid #777;
+}
+#tiban-search {
+  position: absolute;
+  top: 80px; 
+  left: 10px;
+  z-index: 1000;
+  background: rgba(255,255,255);
+  border-radius: 8px;
+  width: 415px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+#tiban-input {
+  width: 100%;
+  padding: 8px;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+#tiban-list {
+  list-style: none;
+  padding: 4px 0;
+  margin: 6px 0 0 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; 
+  touch-action: pan-y; 
+  max-height: calc(50vh);
+  min-height: 0;
+}
+
+/* カスタムコントロール */
+.leaflet-control-custom {
+  position: absolute;
+  bottom: 20px;
+  left: 10px;
+  background: white;
+  padding: 5px;
+  border-radius: 6px;
+  box-shadow: 0 0 4px rgba(0,0,0,0.4);
+  z-index: 1000;
+  cursor: move;
+  transition: transform 0.2s ease;
+}
+.leaflet-control-custom button {
+  width: 36px;
+  height: 36px;
+  margin: 2px;
+  font-size: 18px;
+  cursor: pointer;
+}
+.leaflet-control-custom .pan-buttons {
+  text-align: center;
+  margin-bottom: 4px;
+}
+.leaflet-control-custom .zoom-buttons {
+  text-align: center;
+  margin-top: 4px;
+}
+
+/* スマホ対応 */
+@media (max-width: 768px) {
+  #tiban-search {
+    width: 90%;
+  }
+  .leaflet-control-custom .pan-buttons {
+    display: none;
+  }
+}
+</style>
+</head>
+
+<body>
+<div id="map"></div>
+<div id="title">都市ガス供給エリアマップ</div>
+
+<div id="legend">
+  <h4>凡例</h4>
+  <div><span style="background:#ff0000"></span> 中圧ガス管</div>
+  <div><span style="background:#008000"></span> 低圧ガス管</div>
+  <div><span style="background:#ffff00"></span> 供給可能範囲</div>
+  <div><span style="background:#000000"></span> 町会範囲</div>
+</div>
+
+<div id="tiban-search">
+  <input type="text" id="tiban-input" placeholder="検索（地区名を入力）">
+  <ul id="tiban-list"></ul>
+</div>
+
+<div id="custom-control" class="leaflet-control-custom">
+  <div class="pan-buttons">
+    <div><button onclick="map.panBy([0,-100])">▲</button></div>
+    <div><button onclick="map.panBy([-100,0])">◀</button><button onclick="map.panBy([100,0])">▶</button></div>
+    <div><button onclick="map.panBy([0,100])">▼</button></div>
+  </div>
+  <div class="zoom-buttons">
+    <button onclick="map.zoomIn()">＋</button><button onclick="map.zoomOut()">－</button>
+  </div>
+</div>
+
+<script src="js/leaflet.js"></script>
+<script src="js/L.Control.Layers.Tree.min.js"></script>
+<script src="js/leaflet.rotatedMarker.js"></script>
+<script src="js/leaflet.pattern.js"></script>
+<script src="js/leaflet-hash.js"></script>
+<script src="js/Autolinker.min.js"></script>
+<script src="js/rbush.min.js"></script>
+<script src="js/labelgun.min.js"></script>
+<script src="js/labels.js"></script>
+<script src="js/leaflet.photon.js"></script>
+<script src="js/qgis2web_expressions.js"></script>
+
+<script src="data/tiku_1.js"></script>
+<script src="data/kuiki_2.js"></script>
+<script src="data/gas_medium_3.js"></script>
+<script src="data/gas_low_4.js"></script>
+
+<script>
+// Leaflet マップ初期化
+var map = L.map('map', { zoomControl:false, maxZoom:20, minZoom:12 }).setView([36.229494,137.958057],15);
+var bounds = L.latLngBounds([[36.0975, 137.8317], [36.3273, 138.0962]]);
+map.setMaxBounds(bounds);
+var hash = new L.Hash(map);
+map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+
+// ベースレイヤー
+map.createPane('pane__0');
+map.getPane('pane__0').style.zIndex = 400;
+var layer__0 = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
+    pane: 'pane__0',
+    opacity: 1.0,
+    minZoom: 4,
+    maxZoom: 18
+}).addTo(map);
+
+// --- GeoJSON レイヤー追加 ---
+function addGeoJSONLayer(data, color, weight, fillColor, fillOpacity, interactive) {
+    return L.geoJson(data, {
+        style: { color, weight, fillColor, fillOpacity },
+        interactive: interactive
+    }).addTo(map);
+}
+
+// 町会・供給範囲
+addGeoJSONLayer(json_tiku_1, 'rgba(20,20,20,1.0)', 6, 'rgba(190,178,151,0.1)', false);
+addGeoJSONLayer(json_kuiki_2, 'rgba(255,232,27,1.0)', 6, null, 0, true);
+
+// ガス管レイヤー
+function styleGasMedium(feature) {
+    var zoom = map.getZoom();
+    return { color: 'red', weight: zoom >=17?7:zoom>=15?5:3, fillOpacity:0 };
+}
+function styleGasLow(feature) {
+    var zoom = map.getZoom();
+    return { color: 'green', weight: zoom >=17?5:zoom>=15?3:2, fillOpacity:0 };
+}
+var layerGasMedium = L.geoJson(json_gas_medium_3, { style: styleGasMedium }).addTo(map);
+var layerGasLow = L.geoJson(json_gas_low_4, { style: styleGasLow }).addTo(map);
+map.on('zoomend', function() {
+    layerGasMedium.setStyle(styleGasMedium);
+    layerGasLow.setStyle(styleGasLow);
+});
+
+// --- 番地検索 ---
+const tibanInput = document.getElementById('tiban-input');
+const tibanList = document.getElementById('tiban-list');
+let highlightLayer = null;
+
+// 検索リストの高さ調整（画面サイズと結果数に応じて）
+function updateTibanListHeight() {
+    const mapHeight = window.innerHeight;
+    const maxHeight = mapHeight * 0.5;
+    const itemHeight = 36; // li 1個分の高さ目安
+    const numItems = tibanList.children.length;
+    const desiredHeight = Math.min(maxHeight, Math.max(itemHeight * numItems, itemHeight));
+    tibanList.style.maxHeight = desiredHeight + 'px';
+}
+window.addEventListener('resize', updateTibanListHeight);
+
+tibanInput.addEventListener('input', function() {
+    const val = tibanInput.value.trim();
+    tibanList.innerHTML = '';
+    if (!val) return;
+    const results = json_tiku_1.features.filter(f => ((f.properties.S_NAME||'') + (f.properties.KIHON1||'') + (f.properties.KIHON2||'')).includes(val)).slice(0,20);
+    results.forEach(f=>{
+        const li = document.createElement('li');
+        li.textContent = (f.properties.S_NAME||'') + (f.properties.KIHON1||'') + (f.properties.KIHON2||'');
+        li.style.cursor='pointer';
+        li.style.padding='8px 4px'; 
+        li.style.userSelect='none';
+        li.addEventListener('click', ()=>{
+            if(highlightLayer) map.removeLayer(highlightLayer);
+            highlightLayer = L.geoJson(f, { style:{ color:'pink', weight:3, fillOpacity:0.2 } }).addTo(map);
+            map.fitBounds(L.geoJson(f).getBounds(), { padding: [50,50] });
+            tibanList.innerHTML='';
+        });
+        tibanList.appendChild(li);
+    });
+    updateTibanListHeight();
+});
+
+// --- カスタムコントロール ドラッグ ---
+const control = document.getElementById('custom-control');
+let isDragging = false, dragOffset=[0,0], userPosition=null;
+
+// PC
+control.addEventListener('mousedown', e => { isDragging=true; dragOffset=[e.clientX-control.offsetLeft, e.clientY-control.offsetTop]; });
+document.addEventListener('mousemove', e => { if(isDragging){ userPosition=[e.clientX-dragOffset[0], e.clientY-dragOffset[1]]; control.style.left=userPosition[0]+'px'; control.style.top=userPosition[1]+'px'; control.style.bottom='auto'; }});
+document.addEventListener('mouseup', e => { isDragging=false; });
+
+// タッチ
+control.addEventListener('touchstart', e => { isDragging=true; const touch=e.touches[0]; dragOffset=[touch.clientX-control.offsetLeft,touch.clientY-control.offsetTop]; });
+document.addEventListener('touchmove', e => { if(isDragging){ const touch=e.touches[0]; userPosition=[touch.clientX-dragOffset[0], touch.clientY-dragOffset[1]]; control.style.left=userPosition[0]+'px'; control.style.top=userPosition[1]+'px'; control.style.bottom='auto'; }});
+document.addEventListener('touchend', e => { isDragging=false; });
+
+// マップスクロール・ズームに連動
+function updateControlPosition(){
+    if(!isDragging && !userPosition){ control.style.left='10px'; control.style.bottom='20px'; control.style.top='auto'; }
+    requestAnimationFrame(updateControlPosition);
+}
+updateControlPosition();
+</script>
+</body>
+</html>
