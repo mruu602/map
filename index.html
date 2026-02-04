@@ -180,6 +180,7 @@ html, body, #map {
 <script src="data/kuiki_2.js"></script>
 <script src="data/gas_medium_3.js"></script>
 <script src="data/gas_low_4.js"></script>
+<script src="js/drawing_list.js"></script>
 
 <script>
 // Leaflet マップ初期化
@@ -207,8 +208,71 @@ function addGeoJSONLayer(data, color, weight, fillColor, fillOpacity, interactiv
     }).addTo(map);
 }
 
+// --- 町名クリック：地区全体ガス管詳細図（PDF）表示 ---
+function onEachTiku(feature, layer) {
+  if (!feature.properties) return;
+
+  const keyCode = String(feature.properties.KEY_CODE);
+  const name = feature.properties.S_NAME || '';
+  const drawings = (areaDrawingMap[keyCode] || []).slice().sort();
+
+  let popupContent = `
+    <div style="font-size:14px;">
+      <strong>${name}</strong><br>
+      <div style="margin-top:10px;">
+  `;
+
+  if (drawings.length === 0) {
+    popupContent += '平面図は登録されていません';
+  } else {
+
+    // 1枚だけなら即オープン（試運転中はコメントアウトしてもOK）
+    /*
+    if (drawings.length === 1) {
+      window.open(\`pdf/${drawings[0]}.pdf\`, '_blank');
+      return;
+    }
+    */
+
+    drawings.forEach(code => {
+      popupContent += `
+        <a href="pdf/${code}.pdf" target="_blank"
+           style="
+             display:block;
+             padding:10px;
+             margin-bottom:6px;
+             background:#f0f0f0;
+             border-radius:8px;
+             text-align:center;
+             text-decoration:none;
+             color:#000;
+           ">
+          📄 平面図 ${code}
+        </a>
+      `;
+    });
+  }
+
+  popupContent += `
+      </div>
+    </div>
+  `;
+
+  layer.bindPopup(popupContent, { maxWidth: 260 });
+}
+
+
 // 町会・供給範囲
-addGeoJSONLayer(json_tiku_1, 'rgba(20,20,20,1.0)', 6, 'rgba(190,178,151,0.1)', false);
+L.geoJson(json_tiku_1, {
+    style: {
+        color: 'rgba(20,20,20,1.0)',
+        weight: 6,
+        fillColor: 'rgba(190,178,151,0.1)',
+        fillOpacity: 0.1
+    },
+    onEachFeature: onEachTiku
+}).addTo(map);
+
 addGeoJSONLayer(json_kuiki_2, 'rgba(255,232,27,1.0)', 6, null, 0, true);
 
 // ガス管レイヤー
@@ -247,21 +311,35 @@ tibanInput.addEventListener('input', function() {
     const val = tibanInput.value.trim();
     tibanList.innerHTML = '';
     if (!val) return;
+
     const results = json_tiku_1.features.filter(f => ((f.properties.S_NAME||'') + (f.properties.KIHON1||'') + (f.properties.KIHON2||'')).includes(val)).slice(0,20);
-    results.forEach(f=>{
+
+    results.forEach(f => {
         const li = document.createElement('li');
         li.textContent = (f.properties.S_NAME||'') + (f.properties.KIHON1||'') + (f.properties.KIHON2||'');
         li.style.cursor='pointer';
         li.style.padding='8px 4px'; 
         li.style.userSelect='none';
-        li.addEventListener('click', ()=>{
+
+        li.addEventListener('click', () => {
+            // 既存ハイライトを削除
             if(highlightLayer) map.removeLayer(highlightLayer);
-            highlightLayer = L.geoJson(f, { style:{ color:'pink', weight:3, fillOpacity:0.2 } }).addTo(map);
+
+            // ハイライト追加（クリック不可）
+            highlightLayer = L.geoJson(f, { 
+                style: { color:'pink', weight:3, fillOpacity:0.2 },
+                interactive: false // ← クリックを元ポリゴンに通す
+            }).addTo(map);
+
+            // マップ移動
             map.fitBounds(L.geoJson(f).getBounds(), { padding: [50,50] });
+
             tibanList.innerHTML='';
         });
+
         tibanList.appendChild(li);
     });
+
     updateTibanListHeight();
 });
 
@@ -288,4 +366,3 @@ updateControlPosition();
 </script>
 </body>
 </html>
-
